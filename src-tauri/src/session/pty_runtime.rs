@@ -677,10 +677,11 @@ pub fn cleanup_stale_running_rows_on_startup(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::BTreeMap;
 
+    // Only the cfg(unix) spawn tests below build specs.
+    #[cfg(unix)]
     fn spec(session_id: &str, command: &str, args: &[&str]) -> SpawnSpec {
-        let env: BTreeMap<String, String> = BTreeMap::new();
+        let env: std::collections::BTreeMap<String, String> = std::collections::BTreeMap::new();
         SpawnSpec {
             session_id: session_id.to_string(),
             command: command.to_string(),

@@ -83,6 +83,7 @@ impl EventLog {
             .create(true)
             .read(true)
             .write(true)
+            .truncate(false)
             .open(&path)?;
 
         file.lock_exclusive()?;
@@ -128,6 +129,7 @@ impl EventLog {
             .create(true)
             .read(true)
             .write(true)
+            .truncate(false)
             .open(&self.path)?;
 
         file.lock_exclusive()?;
@@ -156,6 +158,7 @@ impl EventLog {
             .create(true)
             .read(true)
             .write(true)
+            .truncate(false)
             .open(&self.path)
             .map_err(TryAppendError::from_io)?;
 

@@ -88,11 +88,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
-      # Proves a clean Windows checkout compiles: stages host sidecars
-      # for externalBin plus the embedded Linux agent CLI, then checks
-      # the whole workspace (covers all cfg(windows) code, which the
-      # ubuntu Backend job never compiles). Check only — the full
-      # clippy/test matrix stays on ubuntu to keep this job cheap.
+      # Proves a clean Windows checkout compiles warning-free: stages
+      # host sidecars for externalBin plus the embedded Linux agent
+      # CLI, then clippies the whole workspace — covering all the
+      # cfg(windows) code the ubuntu Backend job never compiles. The
+      # test suite stays on ubuntu to keep this job cheap.
       - name: Stage runner CLI sidecars (host + embedded Linux CLI)
         run: node scripts/stage-runner-cli.mjs --profile=debug
-      - run: cargo check --workspace
+      - run: cargo clippy --workspace --all-targets -- -D warnings

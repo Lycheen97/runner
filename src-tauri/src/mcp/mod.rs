@@ -6,8 +6,16 @@
 // `AppState` and command handlers reference them. `server` also stays
 // cross-platform — its `RunnerMcpHandler` is used by `tools`; only its
 // Unix-socket `serve_connection` is gated, inside `server.rs`.
+// `cfg_attr(windows, allow(dead_code))`: per the note above these
+// modules stay compiled on Windows so they can't rot, but with the
+// transport stubbed nothing reaches them — silence the dead-code lint
+// there (clippy runs with `-D warnings`) instead of cfg-gating the
+// whole surface.
+#[cfg_attr(windows, allow(dead_code))]
 mod server;
+#[cfg_attr(windows, allow(dead_code))]
 pub(crate) mod state;
+#[cfg_attr(windows, allow(dead_code))]
 pub(crate) mod tools;
 
 use std::path::{Path, PathBuf};

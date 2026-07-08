@@ -502,6 +502,9 @@ pub async fn mission_post_human_signal(
     mission_post_human_signal_impl(&state, input).await
 }
 
+// Only the MCP mission tools call this; with the Windows-host MCP
+// transport stubbed (M4+) it's unreachable there — see mcp/mod.rs.
+#[cfg_attr(windows, allow(dead_code))]
 pub(crate) async fn mission_start_impl(
     state: &AppState,
     app: &tauri::AppHandle,

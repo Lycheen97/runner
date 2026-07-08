@@ -2,6 +2,8 @@ use rmcp::handler::server::router::tool::ToolRouter;
 use rmcp::handler::server::ServerHandler;
 use rmcp::model::{Implementation, ProtocolVersion, ServerCapabilities, ServerInfo};
 use rmcp::tool_handler;
+// Only `serve_connection` (unix-gated below) drives a service.
+#[cfg(unix)]
 use rmcp::ServiceExt;
 
 use super::state::McpState;

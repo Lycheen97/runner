@@ -32,13 +32,20 @@
 //! empty `LoginShellEnv`.
 
 use std::collections::BTreeMap;
+#[cfg(unix)]
 use std::process::{Command, Stdio};
+#[cfg(unix)]
 use std::sync::mpsc;
+#[cfg(unix)]
 use std::thread;
+#[cfg(unix)]
 use std::time::{Duration, Instant};
 
+#[cfg(unix)]
 const RESOLVE_TIMEOUT: Duration = Duration::from_secs(2);
+#[cfg(unix)]
 const POLL_INTERVAL: Duration = Duration::from_millis(50);
+#[cfg(unix)]
 const STDOUT_DRAIN_GRACE: Duration = Duration::from_millis(500);
 
 /// Var names captured from the login shell. PATH covers the original
@@ -53,6 +60,9 @@ const STDOUT_DRAIN_GRACE: Duration = Duration::from_millis(500);
 /// user has in their rc files. Adding a name here is an explicit
 /// decision that the var (a) is typically rc-file-set, (b) affects
 /// behavior of CLIs the user expects to "just work."
+// `any(unix, test)`: the resolver is unix-only, but the marker-parsing
+// unit tests exercise this + `parse_login_shell_env` on every platform.
+#[cfg(any(unix, test))]
 const CAPTURED_VARS: &[&str] = &[
     "PATH",
     "HTTP_PROXY",
@@ -221,6 +231,7 @@ pub fn resolve_login_shell_env() -> LoginShellEnv {
 /// An empty value (missing var) is dropped — distinct from "var set
 /// to empty string", which we'd represent the same way and which has
 /// no useful effect on a child anyway.
+#[cfg(any(unix, test))]
 fn parse_login_shell_env(stdout: &str) -> LoginShellEnv {
     let mut env = LoginShellEnv::default();
     for v in CAPTURED_VARS {
