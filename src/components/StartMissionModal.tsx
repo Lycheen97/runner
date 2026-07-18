@@ -49,6 +49,7 @@ export function StartMissionModal({
   const [title, setTitle] = useState("");
   const [goal, setGoal] = useState("");
   const [cwd, setCwd] = useState("");
+  const [gardeniaEnabled, setGardeniaEnabled] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -64,6 +65,7 @@ export function StartMissionModal({
     setTitle("");
     setGoal("");
     setCwd(readDefaultWorkingDir());
+    setGardeniaEnabled(false);
     setAdvancedOpen(false);
     setCrewPickerOpen(false);
     setCrewSlots([]);
@@ -146,12 +148,16 @@ export function StartMissionModal({
     setSubmitting(true);
     setError(null);
     try {
-      const out = await api.mission.start({
+      const missionInput = {
         crew_id: crewId,
         title: title.trim(),
         goal_override: goal.trim() ? goal.trim() : null,
         cwd: cwd.trim() ? cwd.trim() : null,
-      }, estimateMissionTerminalGrid());
+      };
+      const initialGrid = estimateMissionTerminalGrid();
+      const out = gardeniaEnabled
+        ? await api.mission.startGardenia(missionInput, initialGrid)
+        : await api.mission.start(missionInput, initialGrid);
       onStarted(out.mission);
     } catch (e) {
       setError(String(e));
@@ -202,7 +208,11 @@ export function StartMissionModal({
             variant="primary"
             onClick={() => void start()}
             disabled={
-              submitting || !crewId || !title.trim() || !launchable
+              submitting ||
+              !crewId ||
+              !title.trim() ||
+              !launchable ||
+              (gardeniaEnabled && !cwd.trim())
             }
           >
             {submitting ? t("Starting…") : t("Start mission")}
@@ -338,6 +348,31 @@ export function StartMissionModal({
             )}
           </p>
         </Field>
+
+        <label className="flex cursor-pointer items-start gap-3 rounded-md border border-line bg-bg px-3.5 py-3 transition-colors hover:border-line-strong">
+          <input
+            type="checkbox"
+            checked={gardeniaEnabled}
+            onChange={(event) => setGardeniaEnabled(event.target.checked)}
+            disabled={submitting}
+            className="mt-0.5 h-4 w-4 accent-accent"
+          />
+          <span className="min-w-0">
+            <span className="block text-xs font-semibold text-fg">
+              {t("Gardenia collaboration")}
+            </span>
+            <span className="mt-1 block text-[11px] leading-relaxed text-fg-2">
+              {t(
+                "Create a durable Gardenia identity for each agent and require task claims with non-overlapping write sets before edits.",
+              )}
+            </span>
+            {gardeniaEnabled && !cwd.trim() ? (
+              <span className="mt-1 block text-[11px] text-warn">
+                {t("Gardenia mode requires a registered project working directory.")}
+              </span>
+            ) : null}
+          </span>
+        </label>
 
         <div className="rounded-md border border-line bg-bg px-3.5 py-3">
           <button

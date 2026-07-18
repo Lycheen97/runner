@@ -3,6 +3,7 @@ mod commands;
 mod db;
 mod error;
 mod event_bus;
+mod gardenia;
 mod mcp;
 mod model;
 mod panic_hook;
@@ -306,6 +307,7 @@ pub fn run() {
             commands::slot::slot_set_lead,
             commands::slot::slot_reorder,
             commands::mission::mission_start,
+            commands::mission::mission_start_gardenia,
             commands::mission::mission_attach,
             commands::mission::mission_stop,
             commands::mission::mission_archive,

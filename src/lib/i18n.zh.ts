@@ -375,6 +375,11 @@ const zhMore: Record<string, string> = {
   "Browse…": "浏览…",
   "Each runner's PTY starts in this directory. Exposed as $MISSION_CWD.":
     "每个 Runner 的终端都从这个目录启动。会以 $MISSION_CWD 暴露。",
+  "Gardenia collaboration": "Gardenia 多 Agent 协作",
+  "Create a durable Gardenia identity for each agent and require task claims with non-overlapping write sets before edits.":
+    "为每个 Agent 创建持久的 Gardenia 身份，并要求编辑前先认领写入范围互不重叠的任务。",
+  "Gardenia mode requires a registered project working directory.":
+    "Gardenia 模式需要填写已注册项目的工作目录。",
   Advanced: "高级",
   "env overrides · per-runner args · attach files":
     "环境变量覆盖 · 各 Runner 参数 · 附加文件",

@@ -68,6 +68,17 @@ fn now() -> Timestamp {
     Utc::now()
 }
 
+fn abort_mission_row(state: &AppState, mission_id: &str) {
+    if let Ok(conn) = state.db.get() {
+        let _ = conn.execute(
+            "UPDATE missions
+                SET status = 'aborted', stopped_at = ?1
+              WHERE id = ?2",
+            rusqlite::params![Utc::now().to_rfc3339(), mission_id],
+        );
+    }
+}
+
 /// Full set of known signal types as `Vec<SignalType>`, the shape the
 /// router + launch-prompt composer take.
 fn all_known_signals() -> Vec<SignalType> {
@@ -232,7 +243,6 @@ pub fn start(
             crew.name
         )));
     }
-
     // Everything below is done under a DB transaction so that if any of the
     // filesystem or event-log writes fail, the mission row is rolled back
     // and the operator doesn't see a phantom `running` mission (review
@@ -510,7 +520,7 @@ pub(crate) async fn mission_start_impl(
     app: &tauri::AppHandle,
     input: StartMissionInput,
 ) -> Result<StartMissionOutput> {
-    mission_start_impl_with_size(state, app, input, None).await
+    mission_start_impl_with_size(state, app, input, None, false).await
 }
 
 async fn mission_start_impl_with_size(
@@ -518,6 +528,7 @@ async fn mission_start_impl_with_size(
     app: &tauri::AppHandle,
     input: StartMissionInput,
     initial_size: Option<(u16, u16)>,
+    gardenia_enabled: bool,
 ) -> Result<StartMissionOutput> {
     use crate::event_bus::{BusEmitter, TauriBusEvents};
     use crate::router::{
@@ -560,6 +571,24 @@ async fn mission_start_impl_with_size(
     };
     let events_log_path =
         event_log::events_path(&state.app_data_dir, &out.mission.crew_id, &out.mission.id);
+    let mission_dir =
+        event_log::mission_dir(&state.app_data_dir, &out.mission.crew_id, &out.mission.id);
+
+    // Gardenia mode bridges Runner's live orchestration with the durable
+    // collaboration protocol. One Gardenia session is created for each slot
+    // before any agent PTY starts, then the mapping is persisted beside the
+    // mission log and injected into the first turn below.
+    let gardenia_state = if gardenia_enabled {
+        match crate::gardenia::prepare_mission(&mission_dir, &out.mission, &roster) {
+            Ok(context) => Some(context),
+            Err(error) => {
+                abort_mission_row(state, &out.mission.id);
+                return Err(error);
+            }
+        }
+    } else {
+        None
+    };
 
     // Effective mission goal — same precedence as the `mission_goal`
     // event opened by `start()` above (override > crew default > "").
@@ -581,7 +610,7 @@ async fn mission_start_impl_with_size(
     // Both delivery paths (spawn-time argv vs post-spawn paste
     // fallback) read from the same composer in `router::prompt`,
     // so the body is byte-identical regardless of route.
-    let first_turns: Vec<Option<String>> = {
+    let first_turns_result: Result<Vec<Option<String>>> = {
         let roster_entries: Vec<crate::router::prompt::RosterEntry> = roster
             .iter()
             .map(|m| crate::router::prompt::RosterEntry {
@@ -594,7 +623,7 @@ async fn mission_start_impl_with_size(
         roster
             .iter()
             .map(|m| {
-                if m.slot.lead {
+                let base = if m.slot.lead {
                     lead_member.map(|lm| {
                         crate::router::prompt::compose_launch_prompt(
                             &crate::router::prompt::LaunchPromptInput {
@@ -616,16 +645,35 @@ async fn mission_start_impl_with_size(
                         m.runner.system_prompt.as_deref(),
                         crew_addendum.as_deref(),
                     ))
+                };
+                match (base, gardenia_state.as_ref()) {
+                    (Some(base), Some(context)) => crate::gardenia::append_first_turn(
+                        base,
+                        context,
+                        &m.slot.slot_handle,
+                        m.slot.lead,
+                    )
+                    .map(Some),
+                    (base, None) => Ok(base),
+                    (None, Some(_)) => Ok(None),
                 }
             })
             .collect()
+    };
+    let first_turns = match first_turns_result {
+        Ok(first_turns) => first_turns,
+        Err(error) => {
+            if let Some(context) = gardenia_state.as_ref() {
+                crate::gardenia::rollback_mission(context, "Runner prompt composition rolled back");
+            }
+            abort_mission_row(state, &out.mission.id);
+            return Err(error);
+        }
     };
 
     // Build the router up front (opens the log, validates the lead, holds
     // empty state). It does NOT subscribe to the bus yet — see ordering
     // below.
-    let mission_dir =
-        event_log::mission_dir(&state.app_data_dir, &out.mission.crew_id, &out.mission.id);
     let log_arc = match open_log_for_mission(&mission_dir) {
         Ok(l) => l,
         Err(e) => {
@@ -638,6 +686,9 @@ async fn mission_start_impl_with_size(
                       WHERE id = ?2",
                     rusqlite::params![Utc::now().to_rfc3339(), out.mission.id],
                 );
+            }
+            if let Some(context) = gardenia_state.as_ref() {
+                crate::gardenia::rollback_mission(context, "Runner log open rolled back");
             }
             return Err(e);
         }
@@ -662,6 +713,9 @@ async fn mission_start_impl_with_size(
                       WHERE id = ?2",
                     rusqlite::params![Utc::now().to_rfc3339(), out.mission.id],
                 );
+            }
+            if let Some(context) = gardenia_state.as_ref() {
+                crate::gardenia::rollback_mission(context, "Runner router setup rolled back");
             }
             return Err(e);
         }
@@ -733,6 +787,12 @@ async fn mission_start_impl_with_size(
                         rusqlite::params![Utc::now().to_rfc3339(), out.mission.id],
                     );
                 }
+                if let Some(context) = gardenia_state.as_ref() {
+                    crate::gardenia::rollback_mission(
+                        context,
+                        "Runner session registration rolled back",
+                    );
+                }
                 return Err(e);
             }
         }
@@ -779,6 +839,9 @@ async fn mission_start_impl_with_size(
                   WHERE id = ?2",
                 rusqlite::params![Utc::now().to_rfc3339(), out.mission.id],
             );
+        }
+        if let Some(context) = gardenia_state.as_ref() {
+            crate::gardenia::rollback_mission(context, "Runner event bus setup rolled back");
         }
         return Err(e);
     }
@@ -890,7 +953,23 @@ pub async fn mission_start(
     let initial_size = initial_cols
         .zip(initial_rows)
         .filter(|(cols, rows)| *cols > 0 && *rows > 0);
-    mission_start_impl_with_size(&state, &app, input, initial_size).await
+    mission_start_impl_with_size(&state, &app, input, initial_size, false).await
+}
+
+/// Start a mission with Gardenia's durable session/task/write-set protocol
+/// layered under Runner's live Crew orchestration.
+#[tauri::command]
+pub async fn mission_start_gardenia(
+    state: State<'_, AppState>,
+    app: tauri::AppHandle,
+    input: StartMissionInput,
+    initial_cols: Option<u16>,
+    initial_rows: Option<u16>,
+) -> Result<StartMissionOutput> {
+    let initial_size = initial_cols
+        .zip(initial_rows)
+        .filter(|(cols, rows)| *cols > 0 && *rows > 0);
+    mission_start_impl_with_size(&state, &app, input, initial_size, true).await
 }
 
 /// Re-attach a mission's router + bus after app restart. The mission row
@@ -1215,6 +1294,22 @@ pub(crate) async fn mission_reset_impl(
             "crew {crew_name} has no lead slot; cannot reset mission",
         )));
     }
+    let mission_dir = event_log::mission_dir(&state.app_data_dir, &mission_snap.crew_id, &id);
+    let gardenia_state = crate::gardenia::load_mission(&mission_dir)?;
+    if let Some(context) = gardenia_state.as_ref() {
+        for member in &roster {
+            if !context
+                .slots
+                .iter()
+                .any(|slot| slot.slot_handle == member.slot.slot_handle)
+            {
+                return Err(Error::msg(format!(
+                    "Gardenia mission has no durable session for current slot @{}; start a new mission after changing Crew membership",
+                    member.slot.slot_handle
+                )));
+            }
+        }
+    }
 
     // 2. Tear down the live state. Kill PTYs first (blocks until
     // reader threads join), then unmount bus + router. Same order as
@@ -1241,7 +1336,6 @@ pub(crate) async fn mission_reset_impl(
     // 4. Wipe the event log + per-mission shim dir so the next spawn
     // starts from a clean slate. The roster sidecar gets rewritten
     // below from the current roster state.
-    let mission_dir = event_log::mission_dir(&state.app_data_dir, &mission_snap.crew_id, &id);
     let events_file = event_log::events_path(&state.app_data_dir, &mission_snap.crew_id, &id);
     if events_file.exists() {
         std::fs::remove_file(&events_file)?;
@@ -1318,7 +1412,7 @@ pub(crate) async fn mission_reset_impl(
     // can deliver it via the positional `[PROMPT]` argv at process
     // boot — same contract as `mission_start`. Borrow of `crew_name`
     // ends here; it's moved into `Router::new` below.
-    let first_turns: Vec<Option<String>> = {
+    let first_turns: Result<Vec<Option<String>>> = {
         let roster_entries: Vec<crate::router::prompt::RosterEntry> = roster
             .iter()
             .map(|m| crate::router::prompt::RosterEntry {
@@ -1331,7 +1425,7 @@ pub(crate) async fn mission_reset_impl(
         roster
             .iter()
             .map(|m| {
-                if m.slot.lead {
+                let base = if m.slot.lead {
                     lead_member.map(|lm| {
                         crate::router::prompt::compose_launch_prompt(
                             &crate::router::prompt::LaunchPromptInput {
@@ -1353,10 +1447,22 @@ pub(crate) async fn mission_reset_impl(
                         m.runner.system_prompt.as_deref(),
                         crew_addendum.as_deref(),
                     ))
+                };
+                match (base, gardenia_state.as_ref()) {
+                    (Some(base), Some(context)) => crate::gardenia::append_first_turn(
+                        base,
+                        context,
+                        &m.slot.slot_handle,
+                        m.slot.lead,
+                    )
+                    .map(Some),
+                    (base, None) => Ok(base),
+                    (None, Some(_)) => Ok(None),
                 }
             })
             .collect()
     };
+    let first_turns = first_turns?;
 
     // 7. Build router + spawn fresh PTYs + mount bus. Same ordering
     // contract as mission_start: spawn first so register_sessions has
@@ -1536,7 +1642,20 @@ pub async fn mission_reset(
 /// before the lifecycle split — preserved as a separate command so
 /// the workspace UI can guard it behind an explicit confirm.
 pub(crate) async fn mission_archive_impl(state: &AppState, id: String) -> Result<Mission> {
+    let gardenia_state = {
+        let conn = state.db.get()?;
+        let mission = get(&conn, &id)?;
+        let mission_dir =
+            event_log::mission_dir(&state.app_data_dir, &mission.crew_id, &mission.id);
+        crate::gardenia::load_mission(&mission_dir)?
+    };
+    if let Some(context) = gardenia_state.as_ref() {
+        crate::gardenia::ensure_sessions_releasable(context)?;
+    }
     state.sessions.kill_all_for_mission(&id)?;
+    if let Some(context) = gardenia_state.as_ref() {
+        crate::gardenia::close_mission_sessions(context)?;
+    }
     let mut conn = state.db.get()?;
     let mission = stop(&mut conn, &state.app_data_dir, &id)?;
     state.buses.unmount(&id);

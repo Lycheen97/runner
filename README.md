@@ -67,6 +67,7 @@ https://github.com/user-attachments/assets/f02e949b-117c-4d44-980a-58a9c76c49fe
 - **Missions** — spawn one PTY session per slot into a tabbed workspace where the crew works toward a shared goal.
 - **Direct chats** — quick 1:1 PTY with a single runner, no mission required.
 - **Event feed** — every signal between agents and the human, persisted to disk and replayable so missions resume cleanly after a quit or crash.
+- **Gardenia collaboration mode (Windows fork)** — creates a durable Gardenia identity per slot and requires non-overlapping task claims before agents edit. See [`docs/gardenia-collaboration.md`](./docs/gardenia-collaboration.md).
 
 For the wire-level architecture (event bus, signal router, runtime contracts) see [`docs/`](./docs/) — start with [`docs/arch/arch.md`](./docs/arch/arch.md).
 
