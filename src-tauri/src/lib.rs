@@ -110,6 +110,10 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
+        // Restore the last window position + size on launch (saved on
+        // close). First launch falls back to the centered default in
+        // tauri.conf.json.
+        .plugin(tauri_plugin_window_state::Builder::new().build())
         .setup(|app| {
             // Dev builds write to a sibling `<identifier>-dev` directory so
             // local testing can't trample a packaged install's database,
