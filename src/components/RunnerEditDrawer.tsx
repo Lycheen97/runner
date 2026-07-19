@@ -66,7 +66,7 @@ export function RunnerEditDrawer({
   // from the row's stored args whenever a runner is loaded.
   const [permissionMode, setPermissionMode] =
     useState<PermissionMode>("accept_edits");
-  const [executionTarget, setExecutionTarget] = useState<string>("wsl");
+  const [executionTarget, setExecutionTarget] = useState<string>("native");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -91,7 +91,8 @@ export function RunnerEditDrawer({
         );
       }
       setPermissionMode(inferPermissionMode(runner.runtime, runner.args));
-      setExecutionTarget(runner.execution_target ?? "wsl");
+      // NULL means native since migration 0009 pinned legacy rows.
+      setExecutionTarget(runner.execution_target ?? "native");
       setError(null);
     }
   }, [open, runner]);
@@ -324,7 +325,7 @@ export function RunnerEditDrawer({
           id="edit-exec-target"
           label={t("Execution target")}
           hint={t(
-            "where the agent runs · WSL by default · Windows runs the command natively on the host",
+            "where the agent runs · Windows host by default · WSL runs it inside your distro",
           )}
         >
           <StyledSelect
@@ -332,17 +333,17 @@ export function RunnerEditDrawer({
             value={executionTarget}
             options={[
               {
-                value: "wsl",
-                label: t("WSL"),
-                description: t(
-                  "Run the agent inside WSL via wsl.exe (claude/codex installed in your distro).",
-                ),
-              },
-              {
                 value: "native",
                 label: t("Windows"),
                 description: t(
                   "Run the command directly on the Windows host (powershell, cmd, a Windows-installed agent).",
+                ),
+              },
+              {
+                value: "wsl",
+                label: t("WSL"),
+                description: t(
+                  "Run the agent inside WSL via wsl.exe (claude/codex installed in your distro).",
                 ),
               },
             ]}

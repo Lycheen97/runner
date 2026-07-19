@@ -47,8 +47,8 @@ const DA1_XTERM_REPLY: &[u8] = b"\x1b[?1;2c";
 /// Turns a `SpawnSpec` (+ the runtime's composed PATH) into the
 /// `CommandBuilder` that `portable-pty` actually forks. This is the one
 /// seam that differs across platforms: the native shaper runs the agent
-/// directly; the Windows shaper (see `session::wsl`) wraps it in
-/// `wsl.exe` so the agent runs inside WSL.
+/// directly; the Windows shaper (see `session::wsl`) launches on the
+/// host via `cmd.exe /c`, or wraps opted-in runners in `wsl.exe`.
 pub type CommandShaper =
     Box<dyn Fn(&SpawnSpec, &str) -> RuntimeResult<CommandBuilder> + Send + Sync>;
 

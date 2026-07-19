@@ -172,15 +172,18 @@ pub fn run() {
                 }
                 #[cfg(windows)]
                 {
-                    // Windows runs the agents inside WSL: the in-process
-                    // PTY (ConPTY) forks `wsl.exe`, and the shaper wraps
-                    // each spawn into the chosen distro. M1 hardcodes the
-                    // distro; M3 adds detection + a Settings picker.
+                    // Windows runs the agents natively on the host by
+                    // default (cmd.exe /c so .cmd shims resolve); a runner
+                    // with execution_target = "wsl" is wrapped in `wsl.exe`
+                    // instead. The Linux `runner` CLI is installed into the
+                    // distro lazily on the first WSL-target spawn, so a
+                    // WSL-free setup never touches the distro. The distro
+                    // is hardcoded; detection + a Settings picker is a
+                    // follow-up.
                     let distro = "Ubuntu".to_string();
-                    log::info!("session runtime: pty over wsl.exe (distro {distro})");
-                    // Install the Linux `runner` agent CLI into the distro
-                    // so mission agents can emit signals onto the event bus.
-                    session::wsl::install::install_linux_runner(&distro);
+                    log::info!(
+                        "session runtime: pty on Windows host (WSL opt-in, distro {distro})"
+                    );
                     Arc::new(session::pty_runtime::PtyRuntime::with_shaper(
                         session::wsl::wsl_command_shaper(distro),
                     ))

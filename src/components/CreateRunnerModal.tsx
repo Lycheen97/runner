@@ -55,8 +55,8 @@ export function CreateRunnerModal({
   // so the user never has to type the flags themselves.
   const [permissionMode, setPermissionMode] =
     useState<PermissionMode>("auto");
-  // Where the agent runs: "wsl" (default) or "native" (Windows host).
-  const [executionTarget, setExecutionTarget] = useState<string>("wsl");
+  // Where the agent runs: "native" (Windows host, default) or "wsl".
+  const [executionTarget, setExecutionTarget] = useState<string>("native");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -70,17 +70,16 @@ export function CreateRunnerModal({
       setWorkingDir(readDefaultWorkingDir());
       setSystemPrompt("");
       setPermissionMode("auto");
-      setExecutionTarget("wsl");
+      setExecutionTarget("native");
       setError(null);
     }
   }, [open]);
 
-  // Command is bound to the runtime's `defaultCommand` for WSL runners
-  // (the binary inside the distro: claude / codex). For "native" Windows
-  // runners the Command field is editable so you can point at a host
-  // command (powershell, a Windows-installed agent, …); we only auto-sync
-  // back to the runtime default while the target is WSL or the runtime
-  // changes.
+  // WSL runners keep Command bound to the in-distro binary (claude /
+  // codex). For "native" (default) runners the field is editable so you
+  // can point at any host command (powershell, a Windows-installed
+  // agent, …); an untouched command is refreshed on runtime change in
+  // the RuntimeSelect onChange below.
   useEffect(() => {
     if (executionTarget !== "native") {
       setCommand(
@@ -196,7 +195,17 @@ export function CreateRunnerModal({
           <RuntimeSelect
             id="new-runner-runtime"
             value={runtime}
-            onChange={(opt) => setRuntime(opt.value)}
+            onChange={(opt) => {
+              setRuntime(opt.value);
+              // Refresh an untouched Command to the new runtime's
+              // default; a hand-edited host command is preserved.
+              const untouched =
+                command.trim() === "" ||
+                RUNTIME_OPTIONS.some(
+                  (o) => o.defaultCommand === command.trim(),
+                );
+              if (untouched) setCommand(opt.defaultCommand);
+            }}
           />
         </Field>
 
@@ -283,7 +292,7 @@ export function CreateRunnerModal({
           id="new-runner-exec-target"
           label={t("Execution target")}
           hint={t(
-            "where the agent runs · WSL by default · Windows runs the command natively on the host",
+            "where the agent runs · Windows host by default · WSL runs it inside your distro",
           )}
         >
           <StyledSelect
@@ -291,17 +300,17 @@ export function CreateRunnerModal({
             value={executionTarget}
             options={[
               {
-                value: "wsl",
-                label: t("WSL"),
-                description: t(
-                  "Run the agent inside WSL via wsl.exe (claude/codex installed in your distro).",
-                ),
-              },
-              {
                 value: "native",
                 label: t("Windows"),
                 description: t(
                   "Run the command directly on the Windows host (powershell, cmd, a Windows-installed agent).",
+                ),
+              },
+              {
+                value: "wsl",
+                label: t("WSL"),
+                description: t(
+                  "Run the agent inside WSL via wsl.exe (claude/codex installed in your distro).",
                 ),
               },
             ]}

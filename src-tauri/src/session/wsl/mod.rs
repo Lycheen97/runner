@@ -1,12 +1,14 @@
-//! Windows + WSL bridge for the PTY runtime.
+//! Windows command shaping for the PTY runtime: native host by
+//! default, WSL as the opt-in fallback.
 //!
-//! On Windows the coding agents (claude, codex) live inside a WSL2
-//! distro, not on the Windows host. The native PTY runtime forks a
-//! ConPTY child; here we make that child `wsl.exe`, which relays the
-//! pseudoconsole into the Linux side so the agent's TUI renders with a
-//! real TTY, resize propagates as SIGWINCH, and the agent's exit code
-//! comes back through wsl.exe. This module owns the one platform-
-//! specific seam — turning a `SpawnSpec` into a `wsl.exe …`
+//! Agents (claude, codex) normally live directly on the Windows host
+//! and launch through `cmd.exe /c` so `.cmd` npm shims resolve. A
+//! runner whose `execution_target` is `"wsl"` instead wraps its spawn
+//! in `wsl.exe`, which relays the ConPTY pseudoconsole into the Linux
+//! side so the agent's TUI renders with a real TTY, resize propagates
+//! as SIGWINCH, and the agent's exit code comes back through wsl.exe.
+//! This module owns that one platform-specific seam — turning a
+//! `SpawnSpec` into either a `cmd.exe /c …` or a `wsl.exe …`
 //! `CommandBuilder`.
 //!
 //! ## Why `bash -lic 'exec <agent>'`
@@ -41,6 +43,10 @@
 //! Windows-native-vs-WSL execution-target switch are M2+/M3 (see plan:
 //! sparkling-honking-spindle.md).
 
+// The lazy install call site is compiled out of test builds (see
+// `INSTALL_LINUX_CLI`), which would otherwise flag this module's
+// internals as dead code under `--all-targets -D warnings`.
+#[cfg_attr(test, allow(dead_code))]
 pub mod install;
 pub mod job;
 pub mod path;
@@ -64,17 +70,28 @@ const WSL_PATH_ENV_KEYS: &[&str] = &["RUNNER_EVENT_LOG", "MISSION_CWD"];
 /// and any WoW64 file-system redirection from a 32-bit host shim.
 const WSL_EXE: &str = r"C:\Windows\System32\wsl.exe";
 
-/// Build a [`CommandShaper`] that runs each agent inside the given WSL
-/// distro. See the module docs for the invocation rationale.
+/// Ensures the Linux `runner` CLI is present in the distro before the
+/// first WSL-target spawn of this app run. Lazy (not at startup) so a
+/// user with zero WSL runners never touches WSL at all. Compiled out
+/// of test builds — the shaper unit tests must not reach into a live
+/// distro.
+#[cfg(not(test))]
+static INSTALL_LINUX_CLI: std::sync::Once = std::sync::Once::new();
+
+/// Build a [`CommandShaper`] for Windows: native-host execution by
+/// default, `wsl.exe` into the given distro when the runner opted in.
+/// See the module docs for the invocation rationale.
 pub fn wsl_command_shaper(distro: String) -> CommandShaper {
     Box::new(
         move |spec: &SpawnSpec, composed_path: &str| -> RuntimeResult<CommandBuilder> {
-            // Per-runner execution target: "native" runs the command
-            // directly on the Windows host (a Windows-installed claude/codex,
-            // powershell, …), everything else (incl. NULL) runs inside WSL.
-            if spec.exec_target.as_deref() == Some("native") {
+            // Per-runner execution target: only an explicit "wsl" runs
+            // inside the distro; everything else (incl. NULL, "native")
+            // runs the command directly on the Windows host.
+            if spec.exec_target.as_deref() != Some("wsl") {
                 return windows_native_shaper(spec, composed_path);
             }
+            #[cfg(not(test))]
+            INSTALL_LINUX_CLI.call_once(|| install::install_linux_runner(&distro));
             // Deliver the launch script as a FILE that bash `source`s,
             // not as an inline `bash -lic '<body>'` argument. A mission
             // lead's launch prompt carries backticks, nested quotes,
@@ -294,6 +311,7 @@ mod tests {
     fn shaper_sources_a_launch_script_file() {
         let mut s = spec("claude", &["--resume", "abc"]);
         s.session_id = "shaper_test_session".into();
+        s.exec_target = Some("wsl".into());
         let shaper = wsl_command_shaper("Ubuntu".into());
         let cmd = shaper(&s, "").unwrap();
         let argv: Vec<String> = cmd

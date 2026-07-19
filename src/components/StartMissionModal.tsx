@@ -334,7 +334,7 @@ export function StartMissionModal({
               id={cwdInputId}
               value={cwd}
               onChange={(e) => setCwd(e.target.value)}
-              placeholder={t("/Users/you/projects/foo (optional)")}
+              placeholder={t("C:\\Users\\you\\projects\\foo (optional)")}
               disabled={submitting}
               className="min-w-0 flex-1 rounded-md border border-line bg-bg px-3 py-2 font-mono text-xs text-fg placeholder:text-fg-3 focus:border-fg-3 focus:outline-none"
             />

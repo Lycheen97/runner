@@ -85,8 +85,8 @@ const zhMain: Record<string, string> = {
     "可选 · 留空用运行时自带的模型 · 可手输名称或选个别名",
   "Permission mode": "权限模式",
   "Execution target": "执行目标",
-  "where the agent runs · WSL by default · Windows runs the command natively on the host":
-    "agent 在哪运行 · 默认 WSL · 选 Windows 则在宿主机原生运行该命令",
+  "where the agent runs · Windows host by default · WSL runs it inside your distro":
+    "agent 在哪运行 · 默认在 Windows 宿主机 · 选 WSL 则在发行版里运行",
   WSL: "WSL",
   "Run the agent inside WSL via wsl.exe (claude/codex installed in your distro).":
     "经 wsl.exe 在 WSL 里运行 agent(claude/codex 装在你的发行版里)。",
@@ -371,7 +371,8 @@ const zhMore: Record<string, string> = {
   "Delivered to @{handle} (lead) on mission start.": "Mission 开始时发给 @{handle}(lead)。",
   "Delivered to the crew lead on mission start.": "Mission 开始时发给 Crew 的 lead。",
   "Describe what to do…": "描述要做什么…",
-  "/Users/you/projects/foo (optional)": "/Users/you/projects/foo(可选)",
+  "C:\\Users\\you\\projects\\foo (optional)":
+    "C:\\Users\\you\\projects\\foo(可选)",
   "Browse…": "浏览…",
   "Each runner's PTY starts in this directory. Exposed as $MISSION_CWD.":
     "每个 Runner 的终端都从这个目录启动。会以 $MISSION_CWD 暴露。",
