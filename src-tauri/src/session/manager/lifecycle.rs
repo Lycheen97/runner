@@ -156,10 +156,20 @@ impl SessionManager {
                 })
                 .collect()
         };
+        // Kill every session before reporting failure — aborting on the
+        // first error used to leave the remaining PTYs alive, which
+        // wedged mission archive halfway (kill some slots, then bail).
+        let mut first_err = None;
         for id in ids {
-            self.kill(&id)?;
+            if let Err(e) = self.kill(&id) {
+                log::error!("kill_all_for_mission: kill {id} failed: {e}");
+                first_err.get_or_insert(e);
+            }
         }
-        Ok(())
+        match first_err {
+            None => Ok(()),
+            Some(e) => Err(e),
+        }
     }
 
     /// Kill every live session for `runner_id` — both mission-scoped and

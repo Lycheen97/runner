@@ -251,10 +251,28 @@ impl SessionRuntime for PtyRuntime {
 
     fn stop(&self, session: &RuntimeSession) -> RuntimeResult<()> {
         let handle = lookup(self, &session.session_id)?;
-        let mut killer = handle.killer.lock().expect("killer poisoned");
-        killer
-            .kill()
-            .map_err(|e| RuntimeError::Msg(format!("ChildKiller::kill: {e}")))?;
+        let kill_result = {
+            let mut killer = handle.killer.lock().expect("killer poisoned");
+            killer.kill()
+        };
+        if let Err(e) = kill_result {
+            // portable-pty 0.9's Windows `WinChildKiller::kill` inverts
+            // the TerminateProcess return-value check: a SUCCESSFUL
+            // terminate reports Err carrying a stale os error (seen as
+            // "access denied"), while a real failure reports Ok. Don't
+            // trust the error — the reader thread flips `alive` off
+            // once the killed child's PTY hits EOF, so poll that
+            // briefly and only fail if the child demonstrably
+            // survived the kill.
+            let deadline = Instant::now() + Duration::from_secs(2);
+            while Instant::now() < deadline {
+                if !handle.alive.load(Ordering::Acquire) {
+                    return Ok(());
+                }
+                thread::sleep(Duration::from_millis(50));
+            }
+            return Err(RuntimeError::Msg(format!("ChildKiller::kill: {e}")));
+        }
         Ok(())
     }
 
