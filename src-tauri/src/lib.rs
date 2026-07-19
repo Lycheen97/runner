@@ -287,6 +287,21 @@ pub fn run() {
                 }
             });
 
+            // Make sure the main window actually fits the screen. The
+            // config default (1440x900 content + title/menu chrome) is
+            // taller than a 1080p-class work area, and the window-state
+            // plugin leaves a first launch pinned at the top-left, so
+            // without this the bottom edge hides under the taskbar.
+            // Runs after the plugin's restore: an oversized window is
+            // shrunk to the work area, and a window that isn't fully
+            // visible (first launch, monitor change, stale state) is
+            // centered. A saved geometry that already fits is untouched.
+            if let Some(window) = app.get_webview_window("main") {
+                if let Err(e) = fit_window_to_work_area(&window) {
+                    log::warn!("window fit-to-work-area failed: {e}");
+                }
+            }
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -439,6 +454,43 @@ pub fn run() {
                 _ => {}
             }
         });
+}
+
+/// Clamp the window into its monitor's work area (the screen minus the
+/// taskbar). Shrinks an outer size larger than the work area, then, if
+/// the window is not entirely inside the work area, centers it there.
+/// A geometry that already fits — e.g. one the window-state plugin
+/// restored from a normal previous session — is left untouched.
+fn fit_window_to_work_area(window: &tauri::WebviewWindow) -> tauri::Result<()> {
+    let Some(monitor) = window.current_monitor()? else {
+        return Ok(());
+    };
+    let wa = monitor.work_area();
+    let outer = window.outer_size()?;
+    if outer.width > wa.size.width || outer.height > wa.size.height {
+        // `set_size` takes the *inner* (content) size, so subtract the
+        // window chrome from the target outer size before applying.
+        let inner = window.inner_size()?;
+        let chrome_w = outer.width.saturating_sub(inner.width);
+        let chrome_h = outer.height.saturating_sub(inner.height);
+        window.set_size(tauri::PhysicalSize::new(
+            outer.width.min(wa.size.width).saturating_sub(chrome_w),
+            outer.height.min(wa.size.height).saturating_sub(chrome_h),
+        ))?;
+    }
+    let size = window.outer_size()?;
+    let pos = window.outer_position()?;
+    let fits = pos.x >= wa.position.x
+        && pos.y >= wa.position.y
+        && pos.x + size.width as i32 <= wa.position.x + wa.size.width as i32
+        && pos.y + size.height as i32 <= wa.position.y + wa.size.height as i32;
+    if !fits {
+        window.set_position(tauri::PhysicalPosition::new(
+            wa.position.x + (wa.size.width.saturating_sub(size.width) / 2) as i32,
+            wa.position.y + (wa.size.height.saturating_sub(size.height) / 2) as i32,
+        ))?;
+    }
+    Ok(())
 }
 
 /// Broadcast the current window→subject map to every webview. Called after
