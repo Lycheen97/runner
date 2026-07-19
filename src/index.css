@@ -30,7 +30,8 @@
   --color-danger: #ff4d6d;
   --color-info: #39e5ff;
 
-  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-mono: "Cascadia Mono", Consolas, ui-monospace, SFMono-Regular, Menlo,
+    "Microsoft YaHei", monospace;
 }
 
 /* Codex Light — pure-white surfaces, near-black ink, sky-blue accent.
@@ -123,7 +124,7 @@ body {
      covers the bootstrap moment before `applyAppFont()` lands. */
   font-family: var(
     --font-app,
-    Inter,
+    "Cascadia Mono",
     system-ui,
     -apple-system,
     BlinkMacSystemFont,

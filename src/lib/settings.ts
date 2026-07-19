@@ -91,6 +91,9 @@ export const TERMINAL_FONT_SIZE_MIN = 10;
 export const TERMINAL_FONT_SIZE_MAX = 20;
 
 export type TerminalFontFamily =
+  | "Cascadia Mono"
+  | "Cascadia Code"
+  | "Consolas"
   | "System default"
   | "Menlo"
   | "Monaco"
@@ -98,6 +101,9 @@ export type TerminalFontFamily =
   | "JetBrains Mono"
   | "Fira Code";
 export const TERMINAL_FONT_FAMILY_OPTIONS: readonly TerminalFontFamily[] = [
+  "Cascadia Mono",
+  "Cascadia Code",
+  "Consolas",
   "System default",
   "Menlo",
   "Monaco",
@@ -106,20 +112,25 @@ export const TERMINAL_FONT_FAMILY_OPTIONS: readonly TerminalFontFamily[] = [
   "Fira Code",
 ];
 
-// App-wide UI font. "Inter" is the current default — what `body` has
-// been using since v1. "System UI" picks the OS-native font instead
-// (SF Pro on macOS, Segoe UI on Windows, system fallback on Linux),
-// for users who prefer their app to match the rest of their desktop
-// chrome. Mono is intentionally absent — that lives on the Terminal
-// font picker.
-export type AppFontFamily = "Inter" | "Geist" | "Roboto" | "System UI";
+// App-wide UI font. "Cascadia Mono" is the default: the PowerShell 7 /
+// Windows Terminal look — Cascadia for Latin, Microsoft YaHei picking
+// up the CJK codepoints through the fallback chain. Inter / Geist /
+// Roboto stay as bundled proportional alternatives; "System UI" picks
+// the OS-native font (SF Pro on macOS, Segoe UI on Windows).
+export type AppFontFamily =
+  | "Cascadia Mono"
+  | "Inter"
+  | "Geist"
+  | "Roboto"
+  | "System UI";
 export const APP_FONT_FAMILY_OPTIONS: readonly AppFontFamily[] = [
+  "Cascadia Mono",
   "Inter",
   "Geist",
   "Roboto",
   "System UI",
 ];
-const DEFAULT_APP_FONT_FAMILY: AppFontFamily = "Inter";
+const DEFAULT_APP_FONT_FAMILY: AppFontFamily = "Cascadia Mono";
 
 export type TerminalCursorStyle = "block" | "underline" | "bar";
 export const TERMINAL_CURSOR_STYLE_OPTIONS: readonly TerminalCursorStyle[] = [
@@ -245,7 +256,7 @@ export const TERMINAL_THEMES: Record<TerminalTheme, ITheme> = {
 
 const DEFAULT_APP_ZOOM = 1.0;
 const DEFAULT_TERMINAL_FONT_SIZE = 13;
-const DEFAULT_TERMINAL_FONT_FAMILY: TerminalFontFamily = "System default";
+const DEFAULT_TERMINAL_FONT_FAMILY: TerminalFontFamily = "Cascadia Mono";
 const DEFAULT_TERMINAL_CURSOR_STYLE: TerminalCursorStyle = "block";
 const DEFAULT_TERMINAL_SCROLLBACK = 10000;
 
@@ -264,16 +275,21 @@ const DEFAULT_TERMINAL_SCROLLBACK = 10000;
 // PUA fallback lands on Apple SD Gothic Neo / Hiragino and the
 // glyph renders as a Hangul-looking character (#152 follow-up).
 //
-// Tail — `Apple Symbols` catches non-Nerd-Font symbol codepoints
-// (extra math, arrows, miscellaneous technical) before the generic
-// `monospace` fallback so the browser doesn't fall back to a CJK
-// face for those either.
+// Middle — the Latin/mono chain, Windows-first: Cascadia Mono is what
+// PowerShell 7 / Windows Terminal render with, Consolas is the ubiquitous
+// fallback, then the macOS faces for that platform.
+//
+// Tail — `Microsoft YaHei` pins CJK codepoints to the same face Windows
+// Terminal falls back to, so Chinese output matches PowerShell 7 instead
+// of landing on the webview's default CJK serif. `Apple Symbols` catches
+// non-Nerd-Font symbol codepoints (extra math, arrows, miscellaneous
+// technical) before the generic `monospace` fallback.
 const SYSTEM_FONT_STACK =
   '"Symbols Nerd Font Mono", "Symbols Nerd Font", ' +
   '"JetBrainsMono Nerd Font", "FiraCode Nerd Font", ' +
   '"Hack Nerd Font Mono", ' +
-  'Menlo, "SF Mono", Monaco, Consolas, "Liberation Mono", ' +
-  '"Apple Symbols", monospace';
+  '"Cascadia Mono", Consolas, Menlo, "SF Mono", Monaco, "Liberation Mono", ' +
+  '"Microsoft YaHei", "Apple Symbols", monospace';
 
 export function readStoredBool(key: string, defaultValue: boolean): boolean {
   try {
@@ -478,10 +494,13 @@ const APP_OS_FONT_STACK =
 // suffixed family name (e.g. `Inter Variable`, not `Inter`). The
 // picker keeps the clean labels for users; this map routes them to
 // the real names so the CSS lookup actually finds the bundled font.
+// Cascadia Mono is a system font (ships with Windows Terminal /
+// Windows 11), so its CSS family is the label itself.
 const APP_FONT_CSS_FAMILY: Record<
   Exclude<AppFontFamily, "System UI">,
   string
 > = {
+  "Cascadia Mono": "Cascadia Mono",
   Inter: "Inter Variable",
   Geist: "Geist Variable",
   Roboto: "Roboto Variable",
